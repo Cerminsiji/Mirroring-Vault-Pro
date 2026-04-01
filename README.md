@@ -2,7 +2,7 @@
 
 **Mirroring Vault Pro** adalah engine sinkronisasi file otomatis berbasis **Google Apps Script** yang dirancang untuk memindahkan file dari web (Archive.org, Open Directories, atau Direct Links) langsung ke Google Drive. Alat ini diciptakan untuk mengatasi batasan *execution timeout* pada server Google dengan sistem antrean (Queue) yang cerdas.
 
-![Mirroring Vault Pro Preview]([https://github.com/username/repo-name/raw/main/img/Screenshot_20260401-215627.jpg](https://raw.githubusercontent.com/Cerminsiji/Mirroring-Vault-Pro/refs/heads/master/contoh.jpg))
+![Mirroring Vault Pro Preview](https://raw.githubusercontent.com/Cerminsiji/Mirroring-Vault-Pro/refs/heads/master/contoh.jpg))
 
 ## 🚀 Fitur Unggulan
 
