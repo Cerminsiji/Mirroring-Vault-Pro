@@ -27,7 +27,7 @@
 1.  **Target URL**: Masukkan URL halaman yang berisi daftar file (misal: halaman Archive.org).
 2.  **Folder Name**: Tentukan nama folder baru yang akan dibuat di Google Drive Anda.
 3.  **File Extensions**: Masukkan format file yang ingin diambil, pisahkan dengan koma (contoh: `pdf, mp3, zip`).
-4.  **Action**: Klik **LANCARKAN DOWNLOAD**. 
+4.  **Action**: Klik **DOWNLOAD**. 
 5.  **Monitoring**: Progres akan muncul dalam hitungan detik. Jika log berhenti bergerak, gunakan tombol **FORCE KICKSTART**.
 
 ## 🔬 Catatan Teknis
