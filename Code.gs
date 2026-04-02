@@ -1,8 +1,8 @@
-/** Mirroring Vault Pro
- */
+/** Mirroring Vault Pro v4.1 - Ultra Stable **/
 
 function doGet() {
-  return HtmlService.createTemplateFromFile('Index').evaluate()
+  const tmp = HtmlService.createTemplateFromFile('Index');
+  return tmp.evaluate()
     .setTitle('Mirroring Vault Pro')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
@@ -14,15 +14,27 @@ function startProcess(data) {
 
   const rootFolder = getOrCreateFolder("Mirroring_Vault");
   const sessionFolder = rootFolder.createFolder(data.folderName || "Job_" + new Date().getTime());
-  const allLinks = collectAllLinks(data.targetUrl, data.fileTypes);
   
-  if (allLinks.length === 0) return "No links found";
+  let allLinks = [];
+  const targetUrl = data.targetUrl.trim();
+  const extList = data.fileTypes.split(',').map(e => e.trim().toLowerCase().replace('.', ''));
+  
+  // Deteksi Direct Link (Case Insensitive)
+  const currentExt = targetUrl.split('.').pop().toLowerCase().split(/[?#]/)[0];
+
+  if (extList.includes(currentExt)) {
+    allLinks.push(targetUrl);
+  } else {
+    allLinks = collectAllLinks(targetUrl, data.fileTypes);
+  }
+  
+  if (allLinks.length === 0) return "Gagal: Tidak menemukan file " + data.fileTypes + " di URL tersebut.";
 
   props.setProperties({
     'FOLDER_ID': sessionFolder.getId(),
     'QUEUE': JSON.stringify(allLinks),
     'TOTAL_COUNT': allLinks.length.toString(),
-    'LOGS': JSON.stringify(["📡 Menemukan " + allLinks.length + " file. Menyiapkan antrean..."]),
+    'LOGS': JSON.stringify(["📡 Mode: " + (allLinks.length === 1 ? "Direct" : "Batch ("+allLinks.length+" file)") + " dimulai..."]),
     'STATUS': 'RUNNING'
   });
   
@@ -48,9 +60,7 @@ function runBatch() {
 
   while (queue.length > 0) {
     if (PropertiesService.getScriptProperties().getProperty('STATUS') !== 'RUNNING') break;
-    
-    // Safety Break (5 menit)
-    if (new Date().getTime() - startTime > 300000) {
+    if (new Date().getTime() - startTime > 300000) { // 5 Menit limit
       props.setProperties({'QUEUE': JSON.stringify(queue), 'LOGS': JSON.stringify(logs)});
       createTrigger();
       return;
@@ -62,13 +72,14 @@ function runBatch() {
       if (resp.getResponseCode() === 200) {
         let name = currentUrl.split('/').pop().split(/[?#]/)[0] || "file_" + new Date().getTime();
         folder.createFile(resp.getBlob().setName(decodeURIComponent(name)));
-        logs.push("✅ Selesai: " + name);
+        logs.push("✅ Selesai: " + decodeURIComponent(name));
+      } else {
+        logs.push("⚠️ Skip (HTTP " + resp.getResponseCode() + "): " + currentUrl.split('/').pop());
       }
     } catch (e) {
       logs.push("❌ Gagal: " + currentUrl.split('/').pop());
     }
 
-    // Push update ke properties agar UI bisa baca secara live
     props.setProperties({
       'QUEUE': JSON.stringify(queue),
       'LOGS': JSON.stringify(logs.slice(-40))
@@ -76,60 +87,63 @@ function runBatch() {
   }
 
   if (queue.length === 0) {
-    props.setProperties({'STATUS': 'FINISHED'});
+    props.setProperty('STATUS', 'FINISHED');
     deleteTriggers();
   }
 }
 
-// Tombol Manual Kickstart & Resume
-function manualKick() {
-  const props = PropertiesService.getScriptProperties();
-  props.setProperty('STATUS', 'RUNNING');
-  runBatch();
-  return "Mesin Dipacu Manual";
+function collectAllLinks(url, extensions) {
+  try {
+    const response = UrlFetchApp.fetch(url, { "headers": { "User-Agent": "Mozilla/5.0" }, "muteHttpExceptions": true });
+    const html = response.getContentText();
+    const extList = extensions.split(',').map(e => e.trim().toLowerCase().replace('.', ''));
+    const regex = /href="([^"]+)"/gi; 
+    let matches, links = [];
+    const seen = new Set();
+
+    while ((matches = regex.exec(html)) !== null) {
+      let link = matches[1];
+      if (link.includes('?C=') || link.includes('../')) continue;
+
+      let fullUrl = link;
+      if (!link.startsWith('http')) {
+        const baseUrl = url.endsWith('/') ? url : url + '/';
+        fullUrl = link.startsWith('/') ? url.split('/').slice(0, 3).join('/') + link : baseUrl + link;
+      }
+
+      const fileExt = fullUrl.split('.').pop().toLowerCase().split(/[?#]/)[0];
+      if (extList.includes(fileExt) && !seen.has(fullUrl)) {
+        links.push(fullUrl);
+        seen.add(fullUrl);
+      }
+    }
+    return links;
+  } catch (e) { return []; }
 }
 
 function setStatus(status) {
-  PropertiesService.getScriptProperties().setProperty('STATUS', status);
-  if (status === 'RUNNING') {
-    createTrigger();
-    runBatch();
-  } else {
-    deleteTriggers();
-  }
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty('STATUS', status);
+  if (status === 'RUNNING') { createTrigger(); runBatch(); }
+  else { deleteTriggers(); }
   return status;
+}
+
+function manualKick() {
+  const props = PropertiesService.getScriptProperties();
+  if(props.getProperty('STATUS') === 'RUNNING') runBatch();
+  return "Kicked";
 }
 
 function getProgress() {
   const props = PropertiesService.getScriptProperties();
+  const queue = JSON.parse(props.getProperty('QUEUE') || "[]");
   return {
     logs: JSON.parse(props.getProperty('LOGS') || "[]"),
-    queueCount: JSON.parse(props.getProperty('QUEUE') || "[]").length,
+    queueCount: queue.length,
     total: parseInt(props.getProperty('TOTAL_COUNT') || 0),
     status: props.getProperty('STATUS') || 'IDLE'
   };
-}
-
-// Scraper Logic (Sama seperti sebelumnya)
-function collectAllLinks(url, extensions) {
-  const html = UrlFetchApp.fetch(url, { "headers": { "User-Agent": "Mozilla/5.0" } }).getContentText();
-  const extList = extensions.split(',').map(e => e.trim().toLowerCase());
-  const regex = /href="([^"]+)"/g;
-  let matches, links = [];
-  while ((matches = regex.exec(html)) !== null) {
-    let link = matches[1];
-    if (!link.startsWith('http')) {
-      const base = url.split('/').slice(0, 3).join('/');
-      link = link.startsWith('/') ? base + link : url.split('/').slice(0, -1).join('/') + '/' + link;
-    }
-    if (link.includes('/web/')) { // Archive.org fix
-       let p = link.split('/'); let i = p.findIndex(x => x.startsWith('http'));
-       if (i !== -1) link = p.slice(i).join('/');
-    }
-    const ext = link.split('.').pop().toLowerCase().split(/[?#]/)[0];
-    if (extList.includes(ext)) links.push(link);
-  }
-  return [...new Set(links)];
 }
 
 function createTrigger() {
